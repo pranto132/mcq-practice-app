@@ -1,0 +1,356 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>MCQ Practice & Exam App</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+:root{
+ --bg:#f4f6fb;
+ --card:#ffffff;
+ --primary:#6750A4;
+ --primary-soft:#ede9ff;
+ --accent:#03dac6;
+ --text:#222222;
+ --muted:#6b7280;
+ --border:#e5e7eb;
+ --danger:#dc2626;
+}
+*{box-sizing:border-box}
+body{
+ margin:0;
+ font-family:Arial, Helvetica, sans-serif;
+ background:var(--bg);
+ color:var(--text);
+}
+.topbar{
+ height:56px;
+ display:flex;
+ align-items:center;
+ justify-content:space-between;
+ padding:0 16px;
+ background:var(--card);
+ box-shadow:0 1px 6px rgba(0,0,0,.08);
+}
+.topbar b{color:var(--primary)}
+.menuBtn{font-size:22px;cursor:pointer;color:var(--primary)}
+.menu{
+ position:absolute;
+ top:60px;right:12px;
+ background:var(--card);
+ border-radius:10px;
+ box-shadow:0 8px 24px rgba(0,0,0,.15);
+ width:220px;display:none;z-index:100;
+}
+.menu div{
+ padding:14px 16px;
+ cursor:pointer;
+ border-bottom:1px solid var(--border);
+}
+.menu div:last-child{border:none}
+.menu div:hover{background:var(--primary-soft)}
+.box{
+ background:var(--card);
+ margin:16px auto;
+ max-width:1000px;
+ border-radius:14px;
+ padding:18px;
+ box-shadow:0 6px 18px rgba(0,0,0,.12);
+}
+.hidden{display:none}
+input,select{
+ width:100%;padding:10px;margin:6px 0;
+ border-radius:8px;border:1px solid var(--border);
+ font-size:15px;
+}
+button{
+ border:none;border-radius:8px;
+ padding:10px 16px;font-size:14px;
+ cursor:pointer;margin:6px 4px 0 0;
+}
+.primary{background:var(--primary);color:#fff}
+.gray{background:#e5e7eb}
+.danger{background:var(--danger);color:#fff}
+.searchBar{display:flex;gap:8px;flex-wrap:wrap}
+.searchBar input{flex:1}
+.opt{
+ padding:12px;margin:8px 0;
+ border-radius:10px;border:1px solid var(--border);
+ cursor:pointer;background:#fafafa;
+}
+.opt.selected{background:var(--primary-soft);border-color:var(--primary)}
+.answerBox{
+ margin-top:12px;padding:12px;
+ border-left:4px solid var(--accent);
+ background:#ecfdf5;border-radius:10px;
+}
+.error{
+ background:#fee2e2;
+ color:#991b1b;
+ padding:12px;
+ border-radius:8px;
+ margin-top:10px;
+}
+.timer{color:var(--danger);font-weight:bold;margin-bottom:8px}
+.footer{text-align:center;color:var(--muted);margin:30px 0}
+</style>
+</head>
+<body>
+<div class="topbar">
+ <b>MCQ Practice App</b>
+ <div class="menuBtn" onclick="toggleMenu()">⋮</div>
+</div>
+<div class="menu" id="menu">
+ <div onclick="showUpload()">📂 Upload File</div>
+ <div onclick="openPractice()">📘 Practice Mode</div>
+ <div onclick="openExamSetup()">📝 Exam Mode</div>
+ <div onclick="openBookmarks()">🔖 Bookmarks</div>
+</div>
+<!-- UPLOAD -->
+<div class="box" id="upload">
+ <input type="file" id="fileInput" accept=".csv,.xls,.xlsx">
+ <button class="primary" onclick="submitFile()">Submit</button>
+ <div id="fileError" class="error hidden"></div>
+ <p style="color:var(--muted)">
+ Required columns:<br>
+ <b>questiontext, option1, option2, option3, option4, answer</b>
+ </p>
+</div>
+<!-- PRACTICE -->
+<div class="box hidden" id="practice">
+ <div class="searchBar">
+  <input type="number" id="searchNo" placeholder="Question number">
+  <input type="text" id="searchText" placeholder="Search question text">
+ </div>
+ <button onclick="searchPractice()">Search</button>
+ <button class="gray" onclick="resetPractice()">Reset</button>
+ <h3 id="qno"></h3>
+ <p id="q"></p>
+ <div id="opts"></div>
+ <div id="answerBox" class="answerBox"></div>
+ <button onclick="toggleBookmark()">⭐ Bookmark</button><br>
+ <button class="gray" onclick="prev()">◀ Previous</button>
+ <button class="primary" onclick="next()">Next ▶</button>
+</div>
+<!-- BOOKMARK -->
+<div class="box hidden" id="bookmarkPage">
+ <h3>🔖 Bookmarked Questions</h3>
+ <div id="bookmarkList"></div>
+</div>
+<!-- EXAM SETUP -->
+<div class="box hidden" id="examSetup">
+ <h3>📝 Exam Setup</h3>
+ Total Questions: <b id="totalQ"></b>
+ <input type="number" id="examQty" placeholder="Exam question quantity">
+ <select id="examOrder">
+  <option value="serial">Serial</option>
+  <option value="random">Random</option>
+ </select>
+ <input type="number" id="examTime" placeholder="Time (minutes)" value="10">
+ <button class="primary" onclick="startExam()">Start Exam</button>
+</div>
+<!-- EXAM -->
+<div class="box hidden" id="exam">
+ <div class="timer" id="timer"></div>
+ <h3 id="examQno"></h3>
+ <p id="examQ"></p>
+ <div id="examOpts"></div>
+ <button class="gray" onclick="examPrev()">◀ Previous</button>
+ <button class="primary" onclick="examNext()">Next ▶</button>
+ <button class="danger" onclick="finishExam()">Finish</button>
+</div>
+<!-- RESULT -->
+<div class="box hidden" id="result"></div>
+<div class="footer">Developed by <b>Tech_Dadu</b></div>
+<script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+<script>
+let allData=[],data=[],i=0,parsedRows=null;
+let bookmarks=JSON.parse(localStorage.getItem("bookmarks")||"[]");
+/* EXAM */
+let examData=[],ei=0,examAns={},timerInt;
+/* MENU */
+function toggleMenu(){menu.style.display=menu.style.display==="block"?"none":"block";}
+function hideAll(){document.querySelectorAll('.box').forEach(b=>b.classList.add('hidden'));menu.style.display="none";}
+function showUpload(){hideAll();upload.classList.remove("hidden");}
+function openPractice(){
+ if(!allData.length) return alert("Upload & submit file first");
+ data=allData;i=0;
+ hideAll();practice.classList.remove("hidden");
+ loadPractice();
+}
+function openExamSetup(){
+ if(!allData.length) return alert("Upload & submit file first");
+ hideAll();examSetup.classList.remove("hidden");
+}
+function openBookmarks(){
+ hideAll();bookmarkPage.classList.remove("hidden");
+ renderBookmarks();
+}
+/* FILE INPUT */
+fileInput.onchange=()=>{
+ fileError.classList.add("hidden");
+ parsedRows=null;
+};
+/* SUBMIT */
+function submitFile(){
+ const file=fileInput.files[0];
+ if(!file) return showError("Please select a file.");
+ const ext=file.name.split(".").pop().toLowerCase();
+ if(!["csv","xls","xlsx"].includes(ext))
+  return showError("Invalid file format.");
+ const reader=new FileReader();
+ reader.onload=e=>{
+  try{
+   if(ext==="csv"){
+    parsedRows=e.target.result.split(/\r?\n/).map(r=>r.split(","));
+   }else{
+    const wb=XLSX.read(e.target.result,{type:"binary"});
+    parsedRows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1});
+   }
+   parse(parsedRows);
+   openPractice();
+  }catch{
+   showError("Invalid file structure.");
+  }
+ };
+ ext==="csv"?reader.readAsText(file):reader.readAsBinaryString(file);
+}
+/* ERROR MESSAGE */
+function showError(msg){
+ fileError.innerHTML=`
+  <b>❌ ${msg}</b><br><br>
+  Please upload <b>CSV / Excel</b> file with columns:<br>
+  <code>
+   questiontext,<br>
+   option1,<br>
+   option2,<br>
+   option3,<br>
+   option4,<br>
+   answer
+  </code>`;
+ fileError.classList.remove("hidden");
+}
+/* PARSE */
+function parse(rows){
+ const h=rows[0].map(x=>String(x).toLowerCase().trim());
+ const req=["questiontext","option1","option2","option3","option4","answer"];
+ for(let r of req){ if(!h.includes(r)) throw "Invalid"; }
+ allData=[];
+ for(let r=1;r<rows.length;r++){
+  if(!rows[r][h.indexOf("questiontext")]) continue;
+  allData.push({
+   q:rows[r][h.indexOf("questiontext")],
+   o:[
+    rows[r][h.indexOf("option1")],
+    rows[r][h.indexOf("option2")],
+    rows[r][h.indexOf("option3")],
+    rows[r][h.indexOf("option4")]
+   ],
+   a:parseInt(rows[r][h.indexOf("answer")])-1
+  });
+ }
+ data=allData;
+ totalQ.innerText=allData.length;
+}
+/* PRACTICE */
+function loadPractice(){
+ qno.innerText=`Question ${i+1} / ${data.length}`;
+ q.innerText=data[i].q;
+ opts.innerHTML=data[i].o.map((x,n)=>
+  `<div class="opt">${String.fromCharCode(65+n)}) ${x}</div>`
+ ).join("");
+ answerBox.innerHTML="<b>Correct Answer:</b> "+String.fromCharCode(65+data[i].a);
+}
+function next(){if(i<data.length-1){i++;loadPractice();}}
+function prev(){if(i>0){i--;loadPractice();}}
+function searchPractice(){
+ const no=parseInt(searchNo.value);
+ const txt=searchText.value.toLowerCase();
+ if(!isNaN(no) && no>=1 && no<=allData.length){
+  data=allData;i=no-1;loadPractice();return;
+ }
+ if(txt){
+  data=allData.filter(q=>q.q.toLowerCase().includes(txt));
+  if(!data.length) return alert("No matching question found");
+  i=0;loadPractice();
+ }
+}
+function resetPractice(){
+ searchNo.value="";searchText.value="";
+ data=allData;i=0;loadPractice();
+}
+/* BOOKMARK */
+function toggleBookmark(){
+ const q=data[i];
+ if(bookmarks.find(b=>b.q===q.q)) return alert("Already bookmarked");
+ bookmarks.push(q);
+ localStorage.setItem("bookmarks",JSON.stringify(bookmarks));
+ alert("Bookmarked");
+}
+function renderBookmarks(){
+ bookmarkList.innerHTML=bookmarks.map((b,idx)=>`
+  <div style="margin-bottom:8px">
+   <span onclick="openBookmark(${idx})">${idx+1}. ${b.q}</span>
+   <button class="danger" onclick="removeBookmark(${idx})">Remove</button>
+  </div>
+ `).join("");
+}
+function openBookmark(idx){
+ data=bookmarks;i=idx;
+ hideAll();practice.classList.remove("hidden");
+ loadPractice();
+}
+function removeBookmark(idx){
+ bookmarks.splice(idx,1);
+ localStorage.setItem("bookmarks",JSON.stringify(bookmarks));
+ renderBookmarks();
+}
+/* EXAM */
+function startExam(){
+ const qty=parseInt(examQty.value);
+ if(qty>allData.length) return alert("Quantity exceeds total questions");
+ examData=[...allData];
+ if(examOrder.value==="random") examData.sort(()=>Math.random()-0.5);
+ examData=examData.slice(0,qty);
+ ei=0; examAns={};
+ hideAll();exam.classList.remove("hidden");
+ loadExam();
+ let t=examTime.value*60;
+ timerInt=setInterval(()=>{
+  timer.innerText="⏱ "+t+"s";
+  if(--t<0) finishExam();
+ },1000);
+}
+function loadExam(){
+ examQno.innerText=`Question ${ei+1} / ${examData.length}`;
+ examQ.innerText=examData[ei].q;
+ examOpts.innerHTML=examData[ei].o.map((x,n)=>{
+  const cls=examAns[ei]===n?"opt selected":"opt";
+  return `<div class="${cls}" onclick="selectExam(${n})">${String.fromCharCode(65+n)}) ${x}</div>`;
+ }).join("");
+}
+function selectExam(n){examAns[ei]=n;loadExam();}
+function examNext(){if(ei<examData.length-1){ei++;loadExam();}}
+function examPrev(){if(ei>0){ei--;loadExam();}}
+function finishExam(){
+ clearInterval(timerInt);
+ let correct=0;
+ for(let k in examAns){
+  if(examAns[k]===examData[k].a) correct++;
+ }
+ const total=examData.length;
+ const wrong=total-correct;
+ const percent=Math.round(correct/total*100);
+ result.innerHTML=`
+  <h3>Result</h3>
+  ✅ Correct: ${correct}<br>
+  ❌ Wrong: ${wrong}<br>
+  📊 Total: ${total}<br>
+  📈 Percentage: ${percent}%
+ `;
+ hideAll();result.classList.remove("hidden");
+}
+</script>
+</body>
+</html>
